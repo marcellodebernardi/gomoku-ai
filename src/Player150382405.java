@@ -40,6 +40,14 @@ public class Player150382405 extends GomokuPlayer {
     }
 
 
+    /**
+     * The main entry point to the player. The game classes call this method to obtain a decision
+     * from the player.
+     *
+     * @param colors board representation in form [row][col], where [0][0] is the top left corner
+     * @param color  what color the player is supposed to move
+     * @return a move
+     */
     @Override
     public Move chooseMove(Color[][] colors, Color color) {
         try {
@@ -47,12 +55,16 @@ public class Player150382405 extends GomokuPlayer {
             Move move = null;
             int moveValue = Integer.MIN_VALUE;
 
+            // generate all possible initial moves
             for (int row = 0; row < boardWidth; row++) {
                 for (int column = 0; column < boardWidth; column++) {
-                    long bit = 1L << (row + column);
+                    // make long with bit set for move
+                    int moveId = (row * 8) + column;
+                    long bit = 0x80000000 >> moveId;
 
+                    // if board is free for this move, expand it
                     if ((board[0] & bit) == 0) {
-                        int val = minimax(board[0] + bit, board[1] + bit, 0, Integer.MIN_VALUE, Integer.MAX_VALUE, false);
+                        int val = minimax(board[0] + bit, board[1] + bit, moveId, 0, Integer.MIN_VALUE, Integer.MAX_VALUE, false);
 
                         if (val > moveValue) {
                             moveValue = val;
@@ -72,8 +84,10 @@ public class Player150382405 extends GomokuPlayer {
     }
 
 
-    /** HELPER: main minimax procedure */
-    private int minimax(long spaces, long player, int depth, int move, int alpha, int beta, boolean maximizing) {
+    /**
+     * HELPER: main minimax procedure
+     */
+    private int minimax(long spaces, long player, int move, int depth, int alpha, int beta, boolean maximizing) {
         int terminal = isTerminal(spaces, player, move, !maximizing);
 
         // if terminal node, return terminal eval
@@ -239,19 +253,38 @@ public class Player150382405 extends GomokuPlayer {
         return bitboard;
     }
 
-    /** HELPER: generates masks in order row, column, lrdiag, rldiag*/
-    private long[] generateMasks(int square) {
+    /**
+     * HELPER: generates masks in order row, column, lrdiag, rldiag
+     */
+    private long[] generateMasks(byte square) {
         // todo this currently generates rotation masks
         if (square < 0 || square > 63)
             throw new IndexOutOfBoundsException("Square is " + square + ", not in range [0, 63].");
 
-        long[] masks = new long[] {0, 0, 0, 0};
+        long[] masks = new long[]{0, 0, 0, 0};
+        byte row = (byte) (square / 8);
+        byte column = (byte) (square % 8);
 
-        for (int i = 0; i < 8; i++) {
-            masks[0] += 1L >>> (square + i);        // row mask
-            masks[1] += 1L >>> (square + i * 8);    // column mask
-            masks[2] += 1L >>> (square + i * 9);    // left-right diagonal mask
-            masks[3] += 1L >>> (square + i * 7);    // right-left diagonal mask
-        }
+        // row mask (all columns in row)
+        for (byte i = 0; i < 8; i++)
+            masks[0] += (0x80000000 >> ((row * 8) + i));
+
+        // column mask (all rows in column)
+        for (byte i = 0; i < 8; i++)
+            masks[1] += (0x80000000 >> (column + (i * 8)));
+
+        // left-right diagonal mask, downward and then upward
+        for (byte i = row, j = column; i < 8 && j < 8; i++, j++)
+            masks[2] += (0x80000000 >> ((8 * i) + j));
+        for (byte i = --row, j = --column; i > 0 && j > 0; i--, j--)
+            masks[2] += (0x80000000 >> ((8 * i) + j));
+
+        // right-left diagonal mask, downward and then upw
+        for (byte i = row, j = column; i < 8 && j > 0; i++, j--)
+            masks[3] += (0x80000000 >> ((8 * i) + j));
+        for (byte i = --row, j = --column; i > 0 && j > 0; i--, j--)
+            masks[3] += (0x80000000 >> ((8 * i) + j));
+
+        return masks;
     }
 }
