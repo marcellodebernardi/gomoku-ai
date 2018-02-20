@@ -13,14 +13,30 @@ import static java.awt.Color.WHITE;
  * @author Marcello De Bernardi 19/02/2018.
  */
 public class Player150382405 extends GomokuPlayer {
+    private int boardWidth;
+    private int numSquares;
+    private int winSequence;
     private int maxDepth;
+    private long[][] masks;
+
+    // flag to signify a node isn't terminal, should not be -100, 0, or 100
+    private int nonTerminal = 1;
 
 
     /**
      * Constructor for the Player class.
      */
     Player150382405() {
+        boardWidth = 8;
+        numSquares = boardWidth * boardWidth;
+        winSequence = 5;
         maxDepth = 3;
+
+        masks = new long[numSquares][4];
+
+        for (int i = 0; i < numSquares; i++) {
+            masks[i] = generateMasks(i);
+        }
     }
 
 
@@ -31,8 +47,8 @@ public class Player150382405 extends GomokuPlayer {
             Move move = null;
             int moveValue = Integer.MIN_VALUE;
 
-            for (int row = 0; row < 8; row++) {
-                for (int column = 0; column < 8; column++) {
+            for (int row = 0; row < boardWidth; row++) {
+                for (int column = 0; column < boardWidth; column++) {
                     long bit = 1L << (row + column);
 
                     if ((board[0] & bit) == 0) {
@@ -57,10 +73,18 @@ public class Player150382405 extends GomokuPlayer {
 
 
     /** HELPER: main minimax procedure */
-    private int minimax(long spaces, long whites, int depth, int alpha, int beta, boolean maximizing) {
-        if (depth == maxDepth || isTerminal(spaces, whites) != 2) {
-            return evaluate(spaces, whites);
+    private int minimax(long spaces, long player, int depth, int move, int alpha, int beta, boolean maximizing) {
+        int terminal = isTerminal(spaces, player, move, !maximizing);
+
+        // if terminal node, return terminal eval
+        if (terminal != nonTerminal) {
+            return terminal;
         }
+        // if not terminal but is a leaf, perform eval
+        else if (depth == maxDepth) {
+            return evaluate(spaces, player);
+        }
+        // else recurse minimax for maximizing player
         else if (maximizing) {
             int value = Integer.MIN_VALUE;
 
@@ -75,6 +99,7 @@ public class Player150382405 extends GomokuPlayer {
 
             return value;
         }
+        // else recurse minimax for minimizing player
         else {
             int value = Integer.MAX_VALUE;
 
@@ -113,7 +138,8 @@ public class Player150382405 extends GomokuPlayer {
     /**
      * HELPER: heuristic evaluation function for nodes
      */
-    private int evaluate(long spaces, long whites) {
+    private int evaluate(long spaces, long player) {
+        // todo use numberofleadingzeros and numberoftrailingzeros to restrict area of bitboard to look at
         // fixme proper evaluation
         return 1;
     }
@@ -121,12 +147,72 @@ public class Player150382405 extends GomokuPlayer {
     /**
      * HELPER: returns -1 is loss, 0 if tie, 1 if win, 2 if non-terminal
      */
-    private int isTerminal(long spaces, long whites) {
-        // -1 is 111...111, i.e. full board
-        if (spaces == -1) return 0;
+    private int isTerminal(long spaces, long player, int move, boolean playerMoved) {
+        // check for win conditions
+        if (playerMoved) {
+            // check row
+            long masked = player & masks[move][0];
+            long shifted = masked;
+            for (int i = 0; i < 4; i++)
+                shifted = (shifted >>> 1) & masked;
+            if (shifted != 0) return 100;
 
-            // fixme
-        else return 2;
+            // check column
+            masked = player & masks[move][1];
+            shifted = masked;
+            for (int i = 0; i < 4; i++)
+                shifted = (shifted >>> 8) & masked;
+            if (shifted != 0) return 100;
+
+            // check left-right diagonal
+            masked = player & masks[move][2];
+            shifted = masked;
+            for (int i = 0; i < 4; i++)
+                shifted = (shifted >>> 9) & masked;
+            if (shifted != 0) return 100;
+
+            // check right-left diagonal
+            masked = player & masks[move][3];
+            shifted = masked;
+            for (int i = 0; i < 4; i++)
+                shifted = (shifted >>> 7) & masked;
+            if (shifted != 0) return 100;
+        }
+        else {
+            player = ~player;
+
+            // check row
+            long masked = player & masks[move][0];
+            long shifted = masked;
+            for (int i = 0; i < 4; i++)
+                shifted = (shifted >>> 1) & masked;
+            if (shifted != 0) return -100;
+
+            // check column
+            masked = player & masks[move][1];
+            shifted = masked;
+            for (int i = 0; i < 4; i++)
+                shifted = (shifted >>> 8) & masked;
+            if (shifted != 0) return -100;
+
+            // check left-right diagonal
+            masked = player & masks[move][2];
+            shifted = masked;
+            for (int i = 0; i < 4; i++)
+                shifted = (shifted >>> 9) & masked;
+            if (shifted != 0) return -100;
+
+            // check right-left diagonal
+            masked = player & masks[move][3];
+            shifted = masked;
+            for (int i = 0; i < 4; i++)
+                shifted = (shifted >>> 7) & masked;
+            if (shifted != 0) return -100;
+        }
+
+        // if no wins, check for tie or non-terminal
+        // -1 is 111...111, i.e. full board
+        return spaces == -1 ? 0 : Integer.MAX_VALUE;
     }
 
     /**
@@ -151,5 +237,21 @@ public class Player150382405 extends GomokuPlayer {
             }
         }
         return bitboard;
+    }
+
+    /** HELPER: generates masks in order row, column, lrdiag, rldiag*/
+    private long[] generateMasks(int square) {
+        // todo this currently generates rotation masks
+        if (square < 0 || square > 63)
+            throw new IndexOutOfBoundsException("Square is " + square + ", not in range [0, 63].");
+
+        long[] masks = new long[] {0, 0, 0, 0};
+
+        for (int i = 0; i < 8; i++) {
+            masks[0] += 1L >>> (square + i);        // row mask
+            masks[1] += 1L >>> (square + i * 8);    // column mask
+            masks[2] += 1L >>> (square + i * 9);    // left-right diagonal mask
+            masks[3] += 1L >>> (square + i * 7);    // right-left diagonal mask
+        }
     }
 }
