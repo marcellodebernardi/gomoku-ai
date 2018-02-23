@@ -2,7 +2,7 @@ import java.awt.Color;
 
 /** The random gomoku player chooses random squares on the board (using a
  *  uniform distribution) until an unoccupied square is found, which is then
- *  returned as the player's move. It is assumed that the board is not full,
+ *  returned as the player's moveCounter. It is assumed that the board is not full,
  *  otherwise chooseMove() will get stuck in an infinite loop. 
  *	Author: Simon Dixon
  **/

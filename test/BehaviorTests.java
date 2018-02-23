@@ -3,6 +3,8 @@ import org.junit.jupiter.api.Test;
 import java.awt.*;
 import java.util.Random;
 
+import static java.awt.Color.BLACK;
+import static java.awt.Color.WHITE;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -15,16 +17,26 @@ class BehaviorTests {
 
     /**
      * Tests that the player takes the appropriate amount of time to decide
-     * on a move.
+     * on a moveCounter.
      */
     @Test
     void testDecisionTime() {
         long startTime = System.currentTimeMillis();
-        Move move = player.chooseMove(generateBoard(), Color.WHITE);
+        Move move = player.chooseMove(generateBoard(), WHITE);
         long timeElapsed = System.currentTimeMillis() - startTime;
 
         assertTrue(timeElapsed > 7000 && timeElapsed < 9000);
     }
+
+    @Test
+    void terminalTest() {
+        long board = 0xF800000000000000L;
+        assertTrue(player.terminal(board, board, 0, true) == 100);
+        assertTrue(player.terminal(board, board, 0, false) == -100);
+        assertTrue(player.terminal(1L, 1L, 63, true) == 1);
+    }
+
+
 
 
     // HELPER: generates random boards for testing
@@ -43,45 +55,12 @@ class BehaviorTests {
                         board[i][j] = Color.BLACK;
                         break;
                     case 2:
-                        board[i][j] = Color.WHITE;
+                        board[i][j] = WHITE;
                         break;
                 }
             }
         }
 
         return board;
-    }
-
-    // HELPER: returns a board with a winning position for white
-    private ExpectedMove winningBoard() {
-        // todo there can be two winning moves
-        ExpectedMove expected = new ExpectedMove();
-        expected.board = new Color[8][8];
-
-        int x = rng.nextInt(8);
-        int y = rng.nextInt(8);
-
-        int xChange, yChange;
-
-        if (x <= 3) xChange = 1;
-        else xChange = -1;
-
-        if (y <= 3) yChange = 1;
-        else yChange = -1;
-
-        for (int i = 0; i < 4; i++) {
-            expected.board[x][y] = Color.WHITE;
-            x += xChange;
-            y += yChange;
-        }
-
-        expected.move = new Move(x + xChange, y + yChange);
-        return expected;
-    }
-
-
-    private class ExpectedMove {
-        Color[][] board;
-        Move move;
     }
 }
