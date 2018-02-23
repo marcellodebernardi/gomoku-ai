@@ -5,9 +5,6 @@ import java.util.Random;
 
 import static java.lang.Long.*;
 
-// todo expand in order of interest? use bitboards to find interesting moves
-// todo reversing boards using Long.reverse and Long.reverseints
-// todo merge terminal checking and evaluation
 // todo initialize alpha and beta to clever values
 // todo negamax or negascout/pvs?
 // todo timer
@@ -20,18 +17,18 @@ public class Player150382405 extends GomokuPlayer {
     private static final int MAX_DEPTH = 6;
     private static final int TIME_LIMIT = 9000;
     // threats and values, all assume freedom to complete 5
-    private static final int WIN = 100;                      // 5 in a row or 4 in a row on your turn
-    private static final int LOSS = -100;                    // 5 in a row or 4 in a row on opponent turn
+    private static final int WIN = 100;                     // 5 in a row or 4 in a row on your turn
+    private static final int LOSS = -100;                   // 5 in a row or 4 in a row on opponent turn
+    private static final int T_STRAIGHT_FOUR = 50;          // 4 in a row with space on both sides
+    private static final int T_DOUBLE_FOUR = 50;            // intersecting fours
+    private static final int T_DOUBLE_THREE = 22;           // intersecting threes
+    private static final int T_FOUR = 15;
+    private static final int T_STRAIGHT_THREE = 11;
+    private static final int T_THREE = 5;
+    private static final int T_TWO = 2;
     private static final int TIE = 0;                       // full board
     private static final int ADVANTAGE = 1;                 // tied situation but player turn
     private static final int DISADVANTAGE = -1;             // tied situation but opponent turn
-    private static final int T_STRAIGHT_FOUR = 9;           // 4 in a row with space on both sides
-    private static final int T_DOUBLE_FOUR = 9;             // intersecting fours
-    private static final int T_DOUBLE_THREE = 8;            // intersecting threes
-    private static final int T_FOUR = 8;
-    private static final int T_STRAIGHT_THREE = 7;
-    private static final int T_THREE = 3;
-    private static final int T_TWO = 2;
     private static final int NOT_TERMINAL = Integer.MAX_VALUE;
     // rows from top to bottom
     private static final long[] ROW_MASKS = {
@@ -176,7 +173,7 @@ public class Player150382405 extends GomokuPlayer {
 
         // if player turn look for a four, this is a way of essentially peaking one move deeper
         if (playerTurn && findSequence(player, opponent, 4) > 0) return WIN;
-        // else if (!playerTurn && findSequence(opponent, player)) return LOSS; todo peaking further for losses makes more defensive?
+        // else if (!playerTurn && findSequence(opponent, player, 4) > 0) return LOSS;
 
         // if not an "about to win" node, start looking for threat patterns
         // search for 4 double threat // TODO: 22/02/2018
