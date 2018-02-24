@@ -6,16 +6,6 @@ import java.util.Random;
 import static java.lang.Long.*;
 import static java.lang.Math.abs;
 
-// todo profile
-// todo check move ordering works correctly
-// todo tweak parameters
-// todo pvs
-// todo get rid of WIN/LOSE SCORES, do this last it's risky
-
-
-// todo initialize alpha and beta to clever values
-// todo negamax or negascout/pvs?
-// todo timer
 
 /**
  * @author Marcello De Bernardi 19/02/2018.
@@ -23,14 +13,14 @@ import static java.lang.Math.abs;
 public class Player150382405 extends GomokuPlayer {
     // settings and parameters
     private static final int MAX_DEPTH = 7;
-    private static final int TIME_LIMIT = 9000;
+    private static final int TIME_LIMIT = 8500;
     // threats and values, all assume freedom to complete 5
-    private static final int WIN = 100;                       // 5 in a row or 4 in a row on your turn
-    private static final int LOSS = -100;                     // 5 in a row or 4 in a row on opponent turn
-    private static final int T_OPEN_FOUR = 4;               // 4 in a row with space on both sides
+    private static final int WIN = 100;
+    private static final int LOSS = -100;
+    private static final int T_OPEN_FOUR = 4;
     private static final int T_FOUR = 1;
     private static final int T_OPEN_THREE = 2;
-    private static final int TIE = 0;                       // full board
+    private static final int TIE = 0;
     private static final int NOT_TERMINAL = Integer.MAX_VALUE;
     // rows from top to bottom
     private static final long[] ROW_MASKS = {
@@ -118,7 +108,7 @@ public class Player150382405 extends GomokuPlayer {
                     playerMove = nextMove;
                 }
             }
-            System.out.println("");
+            // System.out.println("Elapsed time: " + (System.currentTimeMillis() - startTime));
             return move;
         }
         catch (Exception e) {
@@ -137,8 +127,7 @@ public class Player150382405 extends GomokuPlayer {
         // if terminal node, return terminal eval
         if (terminal != NOT_TERMINAL) {
             // System.err.println("Terminal: " + terminal);
-            if (!maximizing && terminal < 0) System.err.println("Detected win for opponent");
-            else if (maximizing && terminal > 0) System.err.println("Detected win for player");
+            // return !maximizing ? terminal + depth : terminal - depth;
             return terminal;
         }
         // if not terminal but is a leaf, perform eval
@@ -350,11 +339,17 @@ public class Player150382405 extends GomokuPlayer {
             long dist2 = abs(numberOfLeadingZeros(opponentMove) - numberOfLeadingZeros(move));
             dist2 = dist2 / 8 + dist2 % 8;
 
-            children[i][3] = min(dist1, dist2);
+            children[i][3] = dist1 < dist2 ? dist1 : dist2;
             moves ^= move;
         }
 
-        Arrays.sort(children, Comparator.comparingLong(move -> move[3]));
+        Arrays.sort(children, new Comparator<long[]>() {
+            @Override
+            public int compare(long[] o1, long[] o2) {
+                if (o1[3] == o2[3]) return 0;
+                else return o1[3] < o2[3] ? -1 : 1;
+            }
+        });
 
         return children;
     }
@@ -413,31 +408,6 @@ public class Player150382405 extends GomokuPlayer {
         x ^= k4 & (x ^ rotateRight(x, 32));
 
         return x;
-    }
-
-    /**
-     * HELPER: Ryan
-     */
-    @SuppressWarnings("Duplicates")
-    private void serializeBoard(long empty, long me) {
-        long mask = 0x8000000000000000L;
-        for (int i = 0; i < GomokuBoard.ROWS; i++) {
-            System.err.print('[');
-            for (int j = 0; j < GomokuBoard.COLS; j++) {
-                if ((me & mask) != 0)
-                    System.err.print('M');
-                else if ((empty & mask) != 0)
-                    System.err.print('O');
-                else
-                    System.err.print('M');
-
-                if (j != GomokuBoard.COLS - 1) System.err.print(", ");
-
-                mask >>= 1;
-            }
-            System.err.print(']');
-            if (i != GomokuBoard.ROWS - 1) System.err.print('\n');
-        }
     }
 
     /**
