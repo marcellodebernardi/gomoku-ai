@@ -216,7 +216,7 @@ public class Player150278980 extends GomokuPlayer {
 
         do {
             try {
-                //System.out.println("======== Depth " + depth + " ========");
+                // System.out.println("======== Depth " + depth + " ========");
                 for (int i = 0; i < depth; i++) {
                     if (movesMap.size() <= i) movesMap.add(new TreeSet<>(MOVE_COMPARATOR));
                 }
@@ -557,8 +557,8 @@ public class Player150278980 extends GomokuPlayer {
 
             if (updateActual) {
                 actualState = state;
-                System.out.println(actualState); // Print move sequence
-                System.out.println(this); // Print board state
+                //System.out.println(actualState); // Print move sequence
+                //System.out.println(this); // Print board state
             }
 
             return state;

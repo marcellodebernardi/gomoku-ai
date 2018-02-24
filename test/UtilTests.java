@@ -15,6 +15,15 @@ class UtilTests {
     private Random rng = new Random();
 
     @Test
+    void terminalTest() {
+        long spaces = 0xFF00000000000000L;
+        long player = 0x7C00000000000000L;
+        long move = 0x08000000000000000L;
+
+        assertTrue(this.player.terminal(spaces, player, move, true) == 8);
+        assertTrue(this.player.terminal(spaces, player, move, false) == -8);
+    }
+    @Test
     void colorConversionTest() {
         Color[][] board = new Color[][] {
                 {null, null, null, null, null, null, null, null},
@@ -29,29 +38,69 @@ class UtilTests {
 
         long[] result = player.colorsToLong(board, WHITE);
 
-        assertTrue(result[0] == 0x00E0E10000FF00L && result[1] == 0x00C0600000AA00L);
+        System.err.println(Long.toHexString(result[0]));
+        System.err.println(Long.toHexString(result[1]));
+        assertTrue(result[0] == 0x00E0E1000000FF00L && result[1] == 0x00C060000000AA00L);
     }
 
     @Test
     void findFoursTest() {
         long fourInRow = 0x000F000000000000L;
-        long fourInColumn = 0x4040404000000000L;
-        long fourDiag = 0x0040201008000000L;
-
         long emptyOpponent = 0x0L;
-        long rowOpponent = 0x0010000000000000L;
-        long columnOpponent = 0x0000000040000000L;
-        long diagonalOpponent = 0x8000000000040000L;
+        long rowOpponent = 0x0000000000000000L;
 
-        assertTrue(player.findSequence(fourInRow, emptyOpponent, 4) == 8);
-        assertTrue(player.findSequence(fourInColumn, emptyOpponent, 4) == 8);
-        assertTrue(player.findSequence(fourDiag, emptyOpponent, 4) == 8);
+        long[] pTransforms = new long[] {
+                fourInRow,
+                player.antidiagonal(fourInRow),
+                player.anticlockwise(fourInRow),
+                player.clockwise(fourInRow)
+        };
+        long[] o1 = new long[] {
+                emptyOpponent,
+                player.antidiagonal(emptyOpponent),
+                player.anticlockwise(emptyOpponent),
+                player.clockwise(emptyOpponent)
+        };
+        long[] o2 = new long[] {
+                rowOpponent,
+                player.antidiagonal(rowOpponent),
+                player.anticlockwise(rowOpponent),
+                player.clockwise(rowOpponent)
+        };
 
-        assertTrue(player.findSequence(emptyOpponent, emptyOpponent, 4) == 0);
+        assertTrue(player.findFours(pTransforms, o1) == 25);
+        assertTrue(player.findFours(o1, o1) == 0);
+        assertTrue(player.findFours(pTransforms, o2) == 25);
+    }
 
-        assertTrue(player.findSequence(fourInRow, rowOpponent, 4) == 0);
-        assertTrue(player.findSequence(fourInColumn, columnOpponent, 4) == 0);
-        assertTrue(player.findSequence(fourDiag, diagonalOpponent, 4) == 0);
+    @Test
+    void findThreesTest() {
+        long three = 0x000E000000000000L;
+        long emptyOpponent = 0x0L;
+        long rowOpponent = 0x0001000000000000L;
+
+        long[] pTransforms = new long[] {
+                three,
+                player.antidiagonal(three),
+                player.anticlockwise(three),
+                player.clockwise(three)
+        };
+        long[] o1 = new long[] {
+                emptyOpponent,
+                player.antidiagonal(emptyOpponent),
+                player.anticlockwise(emptyOpponent),
+                player.clockwise(emptyOpponent)
+        };
+        long[] o2 = new long[] {
+                rowOpponent,
+                player.antidiagonal(rowOpponent),
+                player.anticlockwise(rowOpponent),
+                player.clockwise(rowOpponent)
+        };
+
+        assertTrue(player.findThrees(pTransforms, o1) == 15);
+        assertTrue(player.findThrees(o1, o1) == 0);
+        assertTrue(player.findThrees(pTransforms, o2) == 0);
     }
 
     @Test
@@ -59,64 +108,5 @@ class UtilTests {
         long bitboard = 0xFF00000000000000L;
 
         assertTrue(player.antidiagonal(bitboard) == 0x8080808080808080L);
-    }
-
-
-    // HELPER: generates random boards for testing
-    private Color[][] generateBoard() {
-        Color[][] board = new Color[8][8];
-
-        for (int i = 0; i < board.length; i++) {
-            for (int j = 0; j < board[i].length; j++) {
-                int val = rng.nextInt(3);
-
-                switch (val) {
-                    case 0:
-                        board[i][j] = null;
-                        break;
-                    case 1:
-                        board[i][j] = Color.BLACK;
-                        break;
-                    case 2:
-                        board[i][j] = WHITE;
-                        break;
-                }
-            }
-        }
-
-        return board;
-    }
-
-    // HELPER: returns a board with a winning position for white
-    private ExpectedMove winningBoard() {
-        // todo there can be two winning moves
-        ExpectedMove expected = new ExpectedMove();
-        expected.board = new Color[8][8];
-
-        int x = rng.nextInt(8);
-        int y = rng.nextInt(8);
-
-        int xChange, yChange;
-
-        if (x <= 3) xChange = 1;
-        else xChange = -1;
-
-        if (y <= 3) yChange = 1;
-        else yChange = -1;
-
-        for (int i = 0; i < 4; i++) {
-            expected.board[x][y] = WHITE;
-            x += xChange;
-            y += yChange;
-        }
-
-        expected.move = new Move(x + xChange, y + yChange);
-        return expected;
-    }
-
-
-    private class ExpectedMove {
-        Color[][] board;
-        Move move;
     }
 }

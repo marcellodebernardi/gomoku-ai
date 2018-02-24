@@ -4,6 +4,14 @@ import java.util.Comparator;
 import java.util.Random;
 
 import static java.lang.Long.*;
+import static java.lang.Math.abs;
+
+// todo profile
+// todo check move ordering works correctly
+// todo tweak parameters
+// todo pvs
+// todo get rid of WIN/LOSE SCORES, do this last it's risky
+
 
 // todo initialize alpha and beta to clever values
 // todo negamax or negascout/pvs?
@@ -14,21 +22,15 @@ import static java.lang.Long.*;
  */
 public class Player150382405 extends GomokuPlayer {
     // settings and parameters
-    private static final int MAX_DEPTH = 6;
+    private static final int MAX_DEPTH = 7;
     private static final int TIME_LIMIT = 9000;
     // threats and values, all assume freedom to complete 5
-    private static final int WIN = 100;                     // 5 in a row or 4 in a row on your turn
-    private static final int LOSS = -100;                   // 5 in a row or 4 in a row on opponent turn
-    private static final int T_STRAIGHT_FOUR = 50;          // 4 in a row with space on both sides
-    private static final int T_DOUBLE_FOUR = 50;            // intersecting fours
-    private static final int T_DOUBLE_THREE = 22;           // intersecting threes
-    private static final int T_FOUR = 15;
-    private static final int T_STRAIGHT_THREE = 11;
-    private static final int T_THREE = 5;
-    private static final int T_TWO = 2;
+    private static final int WIN = 100;                       // 5 in a row or 4 in a row on your turn
+    private static final int LOSS = -100;                     // 5 in a row or 4 in a row on opponent turn
+    private static final int T_OPEN_FOUR = 4;               // 4 in a row with space on both sides
+    private static final int T_FOUR = 1;
+    private static final int T_OPEN_THREE = 2;
     private static final int TIE = 0;                       // full board
-    private static final int ADVANTAGE = 1;                 // tied situation but player turn
-    private static final int DISADVANTAGE = -1;             // tied situation but opponent turn
     private static final int NOT_TERMINAL = Integer.MAX_VALUE;
     // rows from top to bottom
     private static final long[] ROW_MASKS = {
@@ -52,7 +54,7 @@ public class Player150382405 extends GomokuPlayer {
     private int firstMoveX;
     private int firstMoveY;
     private long startTime;
-    private long opponentMove;
+    private long playerMove;
     private long opponent;
 
     /**
@@ -84,32 +86,39 @@ public class Player150382405 extends GomokuPlayer {
         // rule-based first moveCounter
         if (firstMove) {
             firstMove = false;
+            playerMove = 0x0000000800000000L;
             return new Move(firstMoveX, colors[firstMoveX][firstMoveY] == null ? firstMoveY : firstMoveY + 1);
         }
 
         // alpha-beta
         try {
             long[] board = colorsToLong(colors, color);
-            long spaces = board[0], player = board[1];
+            long spaces = board[0];
+            long player = board[1];
 
-            opponentMove = (spaces ^ player) ^ opponent;
+            long opponentPreviousMove = (spaces ^ player) ^ opponent;
             opponent = (spaces ^ player);
 
             Move move = null;
             int moveValue = Integer.MIN_VALUE;
 
             // generate all possible initial moves
-            // todo player previous move
-            for (long[] nextBoard : expand(spaces, player, 0x80L, opponentMove)) {
-                long nextSpaces = nextBoard[0], nextPlayer = nextBoard[1], nextMove = nextBoard[2];
-                int val = minimax(nextSpaces, nextPlayer, nextMove, opponentMove, MAX_DEPTH, Integer.MIN_VALUE, Integer.MAX_VALUE, false);
+            for (long[] nextBoard : expand(spaces, player, true, playerMove, opponentPreviousMove)) {
+                long nextSpaces = nextBoard[0];
+                long nextPlayer = nextBoard[1];
+                long nextMove = nextBoard[2];
+
+                int val = minimax(nextSpaces, nextPlayer, nextMove, opponentPreviousMove, MAX_DEPTH, Integer.MIN_VALUE, Integer.MAX_VALUE, false);
 
                 if (val > moveValue) {
                     moveValue = val;
                     move = new Move(numberOfLeadingZeros(nextMove) / 8, numberOfLeadingZeros(nextMove) % 8);
+
+                    System.err.print(move + ": " + moveValue + " || ");
+                    playerMove = nextMove;
                 }
             }
-
+            System.out.println("");
             return move;
         }
         catch (Exception e) {
@@ -127,17 +136,20 @@ public class Player150382405 extends GomokuPlayer {
 
         // if terminal node, return terminal eval
         if (terminal != NOT_TERMINAL) {
-            return terminal + depth;
+            // System.err.println("Terminal: " + terminal);
+            if (!maximizing && terminal < 0) System.err.println("Detected win for opponent");
+            else if (maximizing && terminal > 0) System.err.println("Detected win for player");
+            return terminal;
         }
         // if not terminal but is a leaf, perform eval
-        else if (depth == 0 || (System.currentTimeMillis() - startTime) > TIME_LIMIT) {
-            return evaluate(player, (~player & spaces), maximizing, depth - 1);
+        else if (depth == 1 || (System.currentTimeMillis() - startTime) > TIME_LIMIT) {
+            return evaluate(player, (~player & spaces), depth);
         }
         // else recurse minimax for maximizing player
         else if (maximizing) {
             int value = Integer.MIN_VALUE;
 
-            for (long[] board : expand(spaces, player, prevMove, lastMove)) {
+            for (long[] board : expand(spaces, player, true, prevMove, lastMove)) {
                 int childVal = minimax(board[0], board[1], board[2], lastMove, depth - 1, alpha, beta, false);
 
                 if (childVal > value) value = childVal;
@@ -152,7 +164,7 @@ public class Player150382405 extends GomokuPlayer {
         else {
             int value = Integer.MAX_VALUE;
 
-            for (long[] board : expand(spaces, player, lastMove, prevMove)) {
+            for (long[] board : expand(spaces, player, false, prevMove, lastMove)) {
                 int childVal = minimax(board[0], board[1], board[2], lastMove, depth - 1, alpha, beta, true);
 
                 if (childVal < value) value = childVal;
@@ -168,159 +180,8 @@ public class Player150382405 extends GomokuPlayer {
     /**
      * HELPER: heuristic evaluation function for nodes
      */
-    private int evaluate(long player, long opponent, boolean playerTurn, int depth) {
-        int value = 0;
-
-        // if player turn look for a four, this is a way of essentially peaking one move deeper
-        if (playerTurn && findSequence(player, opponent, 4) > 0) return WIN;
-        // else if (!playerTurn && findSequence(opponent, player, 4) > 0) return LOSS;
-
-        // if not an "about to win" node, start looking for threat patterns
-        // search for 4 double threat // TODO: 22/02/2018
-        // value += findIntersectingSequence(player, opponent, 4);
-        // value -= findIntersectingSequence(opponent, player, 4);
-
-        // search for almost intersecting 3 // TODO: 22/02/2018  
-        // value += findAlmostIntersectingSequence(player, opponent, 3);
-        // value -= findAlmostIntersectingSequence(opponent, player, 3);
-
-        // search for 3 double threat // TODO: 22/02/2018  
-        // value += findIntersectingSequence(player, opponent, 3);
-        // value -= findIntersectingSequence(opponent, player, 3);
-
-        // search for single fours
-        value += findSequence(player, opponent, 4);
-        value -= findSequence(opponent, player, 4);
-
-        // search for almost intersecting 2 // TODO: 22/02/2018 
-        // value += findAlmostIntersectingSequence(player, opponent, 2);
-        // value -= findAlmostIntersectingSequence(opponent, player, 2);
-
-        // search for single threes
-        value += findSequence(player, opponent, 3);
-        value -= findSequence(opponent, player, 3);
-
-        // single twos
-        value += findSequence(player, opponent, 2);
-        value -= findSequence(opponent, player, 2);
-
-        // if tie, give advantage to player with turn
-        if (value == 0) return playerTurn ? ADVANTAGE : DISADVANTAGE;
-        else return value + depth;
-    }
-
-    /**
-     * HELPER: returns -100 is loss, 0 if tie, 100 if win, 1 if non-terminal
-     */
-    int terminal(long spaces, long player, long move, boolean playerMoved) {
-        int maskIndex = Long.numberOfLeadingZeros(move);
-        if (maskIndex == 64) maskIndex--;
-
-        // check for win conditions
-        if (playerMoved) {
-            // check row
-            long masked = player & masks[maskIndex][0];
-            long shifted = masked;
-            for (int i = 0; i < 4; i++)
-                shifted = (shifted >>> 1) & masked;
-            if (shifted != 0) return WIN;
-
-            // check column
-            masked = player & masks[maskIndex][1];
-            shifted = masked;
-            for (int i = 0; i < 4; i++)
-                shifted = (shifted >>> 8) & masked;
-            if (shifted != 0) return WIN;
-
-            // check left-right diagonal
-            masked = player & masks[maskIndex][2];
-            shifted = masked;
-            for (int i = 0; i < 4; i++)
-                shifted = (shifted >>> 9) & masked;
-            if (shifted != 0) return WIN;
-
-            // check right-left diagonal
-            masked = player & masks[maskIndex][3];
-            shifted = masked;
-            for (int i = 0; i < 4; i++)
-                shifted = (shifted >>> 7) & masked;
-            if (shifted != 0) return WIN;
-        }
-        else {
-            player = ~player & spaces;
-
-            // check row
-            long masked = player & masks[maskIndex][0];
-            long shifted = masked;
-            for (int i = 0; i < 4; i++)
-                shifted = (shifted >>> 1) & masked;
-            if (shifted != 0) return LOSS;
-
-            // check column
-            masked = player & masks[maskIndex][1];
-            shifted = masked;
-            for (int i = 0; i < 4; i++)
-                shifted = (shifted >>> 8) & masked;
-            if (shifted != 0) return LOSS;
-
-            // check left-right diagonal
-            masked = player & masks[maskIndex][2];
-            shifted = masked;
-            for (int i = 0; i < 4; i++)
-                shifted = (shifted >>> 9) & masked;
-            if (shifted != 0) return LOSS;
-
-            // check right-left diagonal
-            masked = player & masks[maskIndex][3];
-            shifted = masked;
-            for (int i = 0; i < 4; i++)
-                shifted = (shifted >>> 7) & masked;
-            if (shifted != 0) return LOSS;
-        }
-
-        // if no wins, check for tie or non-terminal
-        // -1 is 111...111, i.e. full board
-        return spaces == -1 ? TIE : NOT_TERMINAL;
-    }
-
-    /**
-     * HELPER: expands the given node, saving the new nodes and returning the list of children
-     */
-    private long[][] expand(long spaces, long player, long playerMove, long opponentMove) {
-        long moves;
-
-        moves  = (spaces >>> 1) & LEFT_OVERFLOW_MASK;
-        moves |= (spaces << 1) & RIGHT_OVERFLOW_MASK;
-        moves |= (spaces >>> 8) & LEFT_OVERFLOW_MASK;
-        moves |= (spaces << 8) & RIGHT_OVERFLOW_MASK;
-        moves |= (spaces >>> 9) & LEFT_OVERFLOW_MASK;
-        moves |= (spaces << 9) & RIGHT_OVERFLOW_MASK;
-        moves |= (spaces >>> 7) & LEFT_OVERFLOW_MASK;
-        moves |= (spaces << 7) & RIGHT_OVERFLOW_MASK;
-        moves ^= spaces;
-
-        // spaces, whites, move, distance
-        long[][] children = new long[bitCount(moves)][4];
-
-        for (int i = 0; i < children.length; i++) {
-            long move = highestOneBit(moves);
-
-            children[i][0] = spaces + move;
-            children[i][1] = player + move;
-            children[i][2] = move;
-            children[i][3] = 0;     // todo move ordering
-            moves ^= move;
-        }
-
-        Arrays.sort(children, Comparator.comparingLong(move -> move[3]));
-
-        return children;
-    }
-
-    /**
-     * HELPER: finds a consecutive sequence in a row, column, or diagonal
-     */
-    int findSequence(long player, long opponent, int sequence) {
+    @SuppressWarnings("Duplicates")
+    private int evaluate(long player, long opponent, int depth) {
         long[] pTransforms = new long[]{
                 player,
                 antidiagonal(player),
@@ -331,18 +192,36 @@ public class Player150382405 extends GomokuPlayer {
                 antidiagonal(opponent) & ~ACW_DIAGONAL_MASK,
                 anticlockwise(opponent) & ~CW_DIAGONAL_MASK,
                 clockwise(opponent)};
-        long maskedPlayer, maskedOpponent;
+
         int value = 0;
+
+        // fours
+        value += findFours(pTransforms, oTransforms);
+        value -= findFours(oTransforms, pTransforms);
+
+        // threes
+        value += findThrees(pTransforms, oTransforms);
+        value -= findThrees(oTransforms, pTransforms);
+
+        return value;   // // TODO: 24/02/2018
+    }
+
+    @SuppressWarnings("Duplicates")
+    int findFours(long[] pTransforms, long[] oTransforms) {
+        int value = 0;
+        long maskedPlayer, maskedOpponent;
 
         // for each row in each transformed board
         for (long mask : ROW_MASKS) {
             // first rows, then columns, lr diagonals, rl diagonals
             for (byte i = 0; i < pTransforms.length; i++) {
+
                 maskedPlayer = pTransforms[i] & mask;
                 maskedOpponent = oTransforms[i] & mask;
 
-                for (byte j = 1; j < sequence; j++)
-                    maskedPlayer = (maskedPlayer >>> 1) & maskedPlayer;
+                maskedPlayer = (maskedPlayer >>> 1) & maskedPlayer;
+                maskedPlayer = (maskedPlayer >>> 1) & maskedPlayer;
+                maskedPlayer = (maskedPlayer >>> 1) & maskedPlayer;
 
                 if (maskedPlayer == 0)
                     continue;
@@ -351,39 +230,134 @@ public class Player150382405 extends GomokuPlayer {
                 if (i == 2) maskedOpponent |= ACW_DIAGONAL_MASK;
                 else if (i == 3) maskedOpponent |= CW_DIAGONAL_MASK;
 
-                if (bitCount((Long.rotateLeft(rotateRight(maskedPlayer, 1) & maskedOpponent, sequence + 1) & maskedOpponent)) == 0)
-                    switch (sequence) {
-                        case 4:
-                            value += T_FOUR;
-                            break;
-                        case 3:
-                            value += T_THREE;
-                            break;
-                        case 2:
-                            value += T_TWO;
-                            break;
-                    }
+                boolean blockedRight = bitCount(rotateRight(maskedPlayer, 1) & maskedOpponent) == 1;
+                boolean blockedLeft = bitCount(rotateLeft(maskedPlayer, 4) & maskedOpponent) == 1;
+
+                if (!blockedLeft && !blockedRight)
+                    value += T_OPEN_FOUR;
+                else if (!(blockedLeft && blockedRight))
+                    value += T_FOUR;
+            }
+        }
+        return value;
+    }
+
+    @SuppressWarnings("Duplicates")
+    int findThrees(long[] pTransforms, long[] oTransforms) {
+        int value = 0;
+        long maskedPlayer, maskedOpponent;
+
+        // for each row in each transformed board
+        for (long mask : ROW_MASKS) {
+            // first rows, then columns, lr diagonals, rl diagonals
+            for (byte i = 0; i < pTransforms.length; i++) {
+                maskedPlayer = pTransforms[i] & mask;
+                maskedOpponent = oTransforms[i] & mask;
+
+                maskedPlayer = (maskedPlayer >>> 1) & maskedPlayer;
+                maskedPlayer = (maskedPlayer >>> 1) & maskedPlayer;
+
+                if (maskedPlayer == 0)
+                    continue;
+
+                // open three
+                maskedOpponent = ~maskedOpponent ^ mask;
+                if (i == 2) maskedOpponent |= ACW_DIAGONAL_MASK;
+                else if (i == 3) maskedOpponent |= CW_DIAGONAL_MASK;
+
+                long rightRotated = rotateRight(maskedPlayer, 1) & maskedOpponent;
+                long leftRotated = rotateLeft(maskedPlayer, 3) & maskedOpponent;
+
+                if (!(bitCount(rightRotated) == 1 || bitCount(leftRotated) == 1) &&
+                        (bitCount(rotateRight(rightRotated, 1)) == 0 || bitCount(rotateLeft(leftRotated, 1)) == 0))
+                    value += T_OPEN_THREE;
             }
         }
         return value;
     }
 
     /**
-     * HELPER: looks for intersections of specific length sequences fulfilling certain
-     * criteria.
+     * HELPER: returns -100 is loss, 0 if tie, 100 if win, 1 if non-terminal
      */
-    private int findIntersectingSequence(long player, long opponent, int sequence) {
-        return 0;
+    int terminal(long spaces, long player, long move, boolean playerMoved) {
+        int maskIndex = Long.numberOfLeadingZeros(move);
+        if (maskIndex == 64) maskIndex--;
+
+        player = playerMoved ? player : player ^ spaces;
+
+        // check row
+        long masked = player & masks[maskIndex][0];
+        long shifted = masked;
+        for (int i = 0; i < 4; i++)
+            shifted = (shifted >>> 1) & masked;
+        if (shifted != 0) return playerMoved ? WIN : LOSS;
+
+        // check column
+        masked = player & masks[maskIndex][1];
+        shifted = masked;
+        for (int i = 0; i < 4; i++)
+            shifted = (shifted >>> 8) & masked;
+        if (shifted != 0) return playerMoved ? WIN : LOSS;
+
+        // check left-right diagonal
+        masked = player & masks[maskIndex][2];
+        shifted = masked;
+        for (int i = 0; i < 4; i++)
+            shifted = (shifted >>> 9) & masked;
+        if (shifted != 0) return playerMoved ? WIN : LOSS;
+
+        // check right-left diagonal
+        masked = player & masks[maskIndex][3];
+        shifted = masked;
+        for (int i = 0; i < 4; i++)
+            shifted = (shifted >>> 7) & masked;
+        if (shifted != 0) return playerMoved ? WIN : LOSS;
+
+
+        // if no wins, check for tie or non-terminal
+        // -1 is 111...111, i.e. full board
+        return spaces == -1 ? TIE : NOT_TERMINAL;
     }
 
     /**
-     * HELPER: looks for sequences of specific length that are one square away from
-     * intersecting.
+     * HELPER: expands the given node, saving the new nodes and returning the list of children
      */
-    private int findAlmostIntersectingSequence(long player, long opponent, int sequence) {
-        return 0;
-    }
+    private long[][] expand(long spaces, long player, boolean playerTurn, long playerMove, long opponentMove) {
+        long moves;
 
+        moves = (spaces >>> 1) & LEFT_OVERFLOW_MASK;
+        moves |= (spaces << 1) & RIGHT_OVERFLOW_MASK;
+        moves |= (spaces >>> 8) & LEFT_OVERFLOW_MASK;
+        moves |= (spaces << 8) & RIGHT_OVERFLOW_MASK;
+        moves |= (spaces >>> 9) & LEFT_OVERFLOW_MASK;
+        moves |= (spaces << 9) & RIGHT_OVERFLOW_MASK;
+        moves |= (spaces >>> 7) & LEFT_OVERFLOW_MASK;
+        moves |= (spaces << 7) & RIGHT_OVERFLOW_MASK;
+        moves ^= spaces;
+
+        // spaces, whites, move, manhattan distance
+        long[][] children = new long[bitCount(moves)][4];
+
+        for (int i = 0; i < children.length; i++) {
+            long move = highestOneBit(moves);
+
+            children[i][0] = spaces + move;
+            children[i][1] = playerTurn ? player + move : player;
+            children[i][2] = move;
+
+            long dist1 = abs(numberOfLeadingZeros(playerMove) - numberOfLeadingZeros(move));
+            dist1 = dist1 / 8 + dist1 % 8;
+            long dist2 = abs(numberOfLeadingZeros(opponentMove) - numberOfLeadingZeros(move));
+            dist2 = dist2 / 8 + dist2 % 8;
+
+            children[i][3] = min(dist1, dist2);
+            moves ^= move;
+        }
+
+        Arrays.sort(children, Comparator.comparingLong(move -> move[3]));
+
+        return children;
+    }
 
     /////////////////////// UTILITIES ////////////////////////////
 
@@ -441,21 +415,25 @@ public class Player150382405 extends GomokuPlayer {
         return x;
     }
 
-    /** HELPER: Ryan */
+    /**
+     * HELPER: Ryan
+     */
     @SuppressWarnings("Duplicates")
     private void serializeBoard(long empty, long me) {
-        long mask = 1L;
+        long mask = 0x8000000000000000L;
         for (int i = 0; i < GomokuBoard.ROWS; i++) {
             System.err.print('[');
             for (int j = 0; j < GomokuBoard.COLS; j++) {
-                if ((empty & mask) != 0) {
-                    System.err.print('-');
-                } else {
-                    System.err.print((me & mask) != 0 ? 'M' : 'O');
-                }
+                if ((me & mask) != 0)
+                    System.err.print('M');
+                else if ((empty & mask) != 0)
+                    System.err.print('O');
+                else
+                    System.err.print('M');
+
                 if (j != GomokuBoard.COLS - 1) System.err.print(", ");
 
-                mask <<= 1;
+                mask >>= 1;
             }
             System.err.print(']');
             if (i != GomokuBoard.ROWS - 1) System.err.print('\n');

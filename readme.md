@@ -24,7 +24,7 @@ using threat-space search.
 2.  If a player constructs a four, he threatens to win at the
     next move. If he constructs a straight 4, the attacker is
     guaranteed to win. If he constructs a three, the attacker
-    threatens to construct a straight three at the next turn;
+    threatens to construct a straight four at the next turn;
     while this threat has a depth of 2, it must be countered
     immediately.
 3.  To win the game against any opposition, a player needs to
