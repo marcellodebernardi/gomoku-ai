@@ -1,20 +1,31 @@
 import java.awt.*;
 import java.util.Arrays;
-import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 
 import static java.lang.Long.*;
 import static java.lang.Math.abs;
 
+// todo profile
+// todo check move ordering works correctly
+// todo tweak parameters
+// todo pvs
+// todo get rid of WIN/LOSE SCORES, do this last it's risky
+
+
+// todo initialize alpha and beta to clever values
+// todo negamax or negascout/pvs?
+// todo timer
 
 /**
  * @author Marcello De Bernardi 19/02/2018.
  */
 public class Player150382405 extends GomokuPlayer {
-    // settings and parameters
-    private static final int MAX_DEPTH = 7;
-    private static final int TIME_LIMIT = 8500;
-    // threats and values, all assume freedom to complete 5
+    // max search depth and search time (milliseconds)
+    private static final int MAX_DEPTH = 6;
+    private static final int TIME_LIMIT = 9700;
+    // heuristic values of various threats
     private static final int WIN = 100;
     private static final int LOSS = -100;
     private static final int T_OPEN_FOUR = 4;
@@ -22,7 +33,7 @@ public class Player150382405 extends GomokuPlayer {
     private static final int T_OPEN_THREE = 2;
     private static final int TIE = 0;
     private static final int NOT_TERMINAL = Integer.MAX_VALUE;
-    // rows from top to bottom
+    // bit masks for each row on the board, to zero all bits not in the row
     private static final long[] ROW_MASKS = {
             0xFF00000000000000L,
             0x00FF000000000000L,
@@ -33,11 +44,12 @@ public class Player150382405 extends GomokuPlayer {
             0x000000000000FF00L,
             0x00000000000000FFL
     };
-    private static final long LEFT_OVERFLOW_MASK = 0x7F7F7F7F7F7F7F7FL;
-    private static final long RIGHT_OVERFLOW_MASK = 0xFEFEFEFEFEFEFEFEL;
+    // masks to eliminate unwanted bits during move generation and board rotations
+    private static final long LEFT_WRAPAROUND_MASK = 0x7F7F7F7F7F7F7F7FL;
+    private static final long RIGHT_WRAPAROUND_MASK = 0xFEFEFEFEFEFEFEFEL;
     private static final long CW_DIAGONAL_MASK = 0x80C0E0FF07030100L;
     private static final long ACW_DIAGONAL_MASK = 0x010307FFE0C08000L;
-    // masks for alternating rows, columns, and diagonals
+    // for each cell, bit masks to filter the containing row, column, diag and anti-diag
     private long[][] masks;
     // game state
     private boolean firstMove;
@@ -51,6 +63,7 @@ public class Player150382405 extends GomokuPlayer {
      * Constructor for the Player class.
      */
     Player150382405() {
+        // determine pre-programmed first move
         firstMove = true;
         firstMoveX = new Random().nextInt(2) + 3;
         firstMoveY = new Random().nextInt(2) + 3;
@@ -73,7 +86,7 @@ public class Player150382405 extends GomokuPlayer {
     public Move chooseMove(Color[][] colors, Color color) {
         startTime = System.currentTimeMillis();
 
-        // rule-based first moveCounter
+        // rule-based first move
         if (firstMove) {
             firstMove = false;
             playerMove = 0x0000000800000000L;
@@ -82,22 +95,25 @@ public class Player150382405 extends GomokuPlayer {
 
         // alpha-beta
         try {
+            // convert board to internal representation
             long[] board = colorsToLong(colors, color);
             long spaces = board[0];
             long player = board[1];
 
+            // compute opponent's move using difference to previous state
             long opponentPreviousMove = (spaces ^ player) ^ opponent;
             opponent = (spaces ^ player);
 
             Move move = null;
             int moveValue = Integer.MIN_VALUE;
 
-            // generate all possible initial moves
+            // generate all adjacent moves
             for (long[] nextBoard : expand(spaces, player, true, playerMove, opponentPreviousMove)) {
                 long nextSpaces = nextBoard[0];
                 long nextPlayer = nextBoard[1];
                 long nextMove = nextBoard[2];
 
+                // minimax on moves
                 int val = minimax(nextSpaces, nextPlayer, nextMove, opponentPreviousMove, MAX_DEPTH, Integer.MIN_VALUE, Integer.MAX_VALUE, false);
 
                 if (val > moveValue) {
@@ -108,7 +124,7 @@ public class Player150382405 extends GomokuPlayer {
                     playerMove = nextMove;
                 }
             }
-            // System.out.println("Elapsed time: " + (System.currentTimeMillis() - startTime));
+            System.out.println("Time elapsed: " + (System.currentTimeMillis() - startTime));
             return move;
         }
         catch (Exception e) {
@@ -126,13 +142,11 @@ public class Player150382405 extends GomokuPlayer {
 
         // if terminal node, return terminal eval
         if (terminal != NOT_TERMINAL) {
-            // System.err.println("Terminal: " + terminal);
-            // return !maximizing ? terminal + depth : terminal - depth;
             return terminal;
         }
-        // if not terminal but is a leaf, perform eval
+        // evaluate if leaf node or reached time cutoff
         else if (depth == 1 || (System.currentTimeMillis() - startTime) > TIME_LIMIT) {
-            return evaluate(player, (~player & spaces), depth);
+            return evaluate(player, (~player & spaces));
         }
         // else recurse minimax for maximizing player
         else if (maximizing) {
@@ -170,17 +184,17 @@ public class Player150382405 extends GomokuPlayer {
      * HELPER: heuristic evaluation function for nodes
      */
     @SuppressWarnings("Duplicates")
-    private int evaluate(long player, long opponent, int depth) {
+    private int evaluate(long player, long opponent) {
         long[] pTransforms = new long[]{
                 player,
                 antidiagonal(player),
-                anticlockwise(player),
-                clockwise(player)};
+                anticlockwise(player) ^ ACW_DIAGONAL_MASK,
+                clockwise(player) ^ CW_DIAGONAL_MASK};
         long[] oTransforms = new long[]{
                 opponent,
-                antidiagonal(opponent) & ~ACW_DIAGONAL_MASK,
-                anticlockwise(opponent) & ~CW_DIAGONAL_MASK,
-                clockwise(opponent)};
+                antidiagonal(opponent),
+                anticlockwise(opponent) ^ ACW_DIAGONAL_MASK,
+                clockwise(opponent) ^ CW_DIAGONAL_MASK} ;
 
         int value = 0;
 
@@ -192,7 +206,7 @@ public class Player150382405 extends GomokuPlayer {
         value += findThrees(pTransforms, oTransforms);
         value -= findThrees(oTransforms, pTransforms);
 
-        return value;   // // TODO: 24/02/2018
+        return value;
     }
 
     @SuppressWarnings("Duplicates")
@@ -314,14 +328,16 @@ public class Player150382405 extends GomokuPlayer {
     private long[][] expand(long spaces, long player, boolean playerTurn, long playerMove, long opponentMove) {
         long moves;
 
-        moves = (spaces >>> 1) & LEFT_OVERFLOW_MASK;
-        moves |= (spaces << 1) & RIGHT_OVERFLOW_MASK;
-        moves |= (spaces >>> 8) & LEFT_OVERFLOW_MASK;
-        moves |= (spaces << 8) & RIGHT_OVERFLOW_MASK;
-        moves |= (spaces >>> 9) & LEFT_OVERFLOW_MASK;
-        moves |= (spaces << 9) & RIGHT_OVERFLOW_MASK;
-        moves |= (spaces >>> 7) & LEFT_OVERFLOW_MASK;
-        moves |= (spaces << 7) & RIGHT_OVERFLOW_MASK;
+        // generate adjacent moves by ORing shifted bits
+        // then XOR to remove overlaps with occupied squares
+        moves = ((spaces >>> 1) & LEFT_WRAPAROUND_MASK);
+        moves |= ((spaces << 1) & RIGHT_WRAPAROUND_MASK);
+        moves |= (spaces >>> 8);
+        moves |= (spaces << 8);
+        moves |= ((spaces >>> 9) & LEFT_WRAPAROUND_MASK);
+        moves |= ((spaces << 9) & RIGHT_WRAPAROUND_MASK);
+        moves |= ((spaces >>> 7) & RIGHT_WRAPAROUND_MASK);
+        moves |= ((spaces << 7) & LEFT_WRAPAROUND_MASK);
         moves ^= spaces;
 
         // spaces, whites, move, manhattan distance
@@ -330,8 +346,8 @@ public class Player150382405 extends GomokuPlayer {
         for (int i = 0; i < children.length; i++) {
             long move = highestOneBit(moves);
 
-            children[i][0] = spaces + move;
-            children[i][1] = playerTurn ? player + move : player;
+            children[i][0] = spaces | move;
+            children[i][1] = playerTurn ? player | move : player;
             children[i][2] = move;
 
             long dist1 = abs(numberOfLeadingZeros(playerMove) - numberOfLeadingZeros(move));
@@ -339,16 +355,14 @@ public class Player150382405 extends GomokuPlayer {
             long dist2 = abs(numberOfLeadingZeros(opponentMove) - numberOfLeadingZeros(move));
             dist2 = dist2 / 8 + dist2 % 8;
 
-            children[i][3] = dist1 < dist2 ? dist1 : dist2;
+            children[i][3] = Long.min(dist1, dist2);
             moves ^= move;
         }
 
-        Arrays.sort(children, new Comparator<long[]>() {
-            @Override
-            public int compare(long[] o1, long[] o2) {
-                if (o1[3] == o2[3]) return 0;
-                else return o1[3] < o2[3] ? -1 : 1;
-            }
+        // order moves by manhattan distance to last player move or opp move
+        Arrays.sort(children, (move1, move2) -> {
+            if (move1[3] == move2[3]) return 0;
+            else return move1[3] < move2[3] ? -1 : 1;
         });
 
         return children;
@@ -362,7 +376,6 @@ public class Player150382405 extends GomokuPlayer {
     long antidiagonal(long x) {
         // standard antidiagonal flip from
         // https://chessprogramming.wikispaces.com/Flipping%20Mirroring%20and%20Rotating
-
         long t;
         long k1 = 0x5500550055005500L;
         long k2 = 0x3333000033330000L;
@@ -384,7 +397,6 @@ public class Player150382405 extends GomokuPlayer {
     long clockwise(long x) {
         // standard clockwise rotation from
         // https://chessprogramming.wikispaces.com/Flipping%20Mirroring%20and%20Rotating
-
         long k1 = 0xAAAAAAAAAAAAAAAAL;
         long k2 = 0xCCCCCCCCCCCCCCCCL;
         long k4 = 0xF0F0F0F0F0F0F0F0L;
@@ -400,6 +412,8 @@ public class Player150382405 extends GomokuPlayer {
      * map left->right diagonals to ranks.
      */
     long anticlockwise(long x) {
+        // standard anticlockwise flip from
+        // https://chessprogramming.wikispaces.com/Flipping%20Mirroring%20and%20Rotating
         long k1 = 0x5555555555555555L;
         long k2 = 0x3333333333333333L;
         long k4 = 0x0f0f0f0f0f0f0f0fL;
@@ -453,13 +467,13 @@ public class Player150382405 extends GomokuPlayer {
         // left-right diagonal mask, downward and then upward
         for (int i = row, j = column; i < 8 && j < 8; i++, j++)
             masks[2] += (0x8000000000000000L >>> ((8 * i) + j));
-        for (int i = --row, j = --column; i > 0 && j > 0; i--, j--)
+        for (int i = --row, j = --column; i >= 0 && j >= 0; i--, j--)
             masks[2] += (0x8000000000000000L >>> ((8 * i) + j));
 
         // right-left diagonal mask, downward and then upw
-        for (int i = row, j = column; i < 8 && j > 0; i++, j--)
+        for (int i = row, j = column; i < 8 && j >= 0; i++, j--)
             masks[3] += (0x8000000000000000L >>> ((8 * i) + j));
-        for (int i = --row, j = --column; i > 0 && j < 8; i--, j++)
+        for (int i = --row, j = ++column; i >= 0 && j < 8; i--, j++)
             masks[3] += (0x8000000000000000L >>> ((8 * i) + j));
 
         return masks;

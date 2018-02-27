@@ -68,9 +68,9 @@ class UtilTests {
                 player.clockwise(rowOpponent)
         };
 
-        assertTrue(player.findFours(pTransforms, o1) == 25);
+        assertTrue(player.findFours(pTransforms, o1) == 1);
         assertTrue(player.findFours(o1, o1) == 0);
-        assertTrue(player.findFours(pTransforms, o2) == 25);
+        assertTrue(player.findFours(pTransforms, o2) == 1);
     }
 
     @Test
