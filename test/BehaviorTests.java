@@ -3,8 +3,8 @@ import org.junit.jupiter.api.Test;
 import java.awt.*;
 import java.util.Random;
 
-import static java.awt.Color.BLACK;
 import static java.awt.Color.WHITE;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -31,9 +31,9 @@ class BehaviorTests {
     @Test
     void terminalTest() {
         long board = 0xF800000000000000L;
-        assertTrue(player.terminal(board, board, 0, true) == 100);
-        assertTrue(player.terminal(board, board, 0, false) == -100);
-        assertTrue(player.terminal(1L, 1L, 63, true) == 1);
+        assertEquals(100, player.terminal(board, board, 0, true));
+        assertEquals(player.terminal(board, board, 0, false), -100);
+        assertEquals(1, player.terminal(1L, 1L, 63, true));
     }
 
 

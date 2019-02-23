@@ -5,6 +5,7 @@ import java.util.Random;
 
 import static java.awt.Color.BLACK;
 import static java.awt.Color.WHITE;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -20,8 +21,8 @@ class UtilTests {
         long player = 0x7C00000000000000L;
         long move = 0x08000000000000000L;
 
-        assertTrue(this.player.terminal(spaces, player, move, true) == 8);
-        assertTrue(this.player.terminal(spaces, player, move, false) == -8);
+        assertEquals(8, this.player.terminal(spaces, player, move, true));
+        assertEquals(this.player.terminal(spaces, player, move, false), -8);
     }
     @Test
     void colorConversionTest() {
@@ -68,9 +69,9 @@ class UtilTests {
                 player.clockwise(rowOpponent)
         };
 
-        assertTrue(player.findFours(pTransforms, o1) == 1);
-        assertTrue(player.findFours(o1, o1) == 0);
-        assertTrue(player.findFours(pTransforms, o2) == 1);
+        assertEquals(1, player.findFours(pTransforms, o1));
+        assertEquals(0, player.findFours(o1, o1));
+        assertEquals(1, player.findFours(pTransforms, o2));
     }
 
     @Test
@@ -98,15 +99,15 @@ class UtilTests {
                 player.clockwise(rowOpponent)
         };
 
-        assertTrue(player.findThrees(pTransforms, o1) == 15);
-        assertTrue(player.findThrees(o1, o1) == 0);
-        assertTrue(player.findThrees(pTransforms, o2) == 0);
+        assertEquals(15, player.findThrees(pTransforms, o1));
+        assertEquals(0, player.findThrees(o1, o1));
+        assertEquals(0, player.findThrees(pTransforms, o2));
     }
 
     @Test
     void antidiagonalTest() {
         long bitboard = 0xFF00000000000000L;
 
-        assertTrue(player.antidiagonal(bitboard) == 0x8080808080808080L);
+        assertEquals(0x8080808080808080L, player.antidiagonal(bitboard));
     }
 }
